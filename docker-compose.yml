@@ -1,0 +1,103 @@
+version: "2"
+services:
+
+  master:
+    image: rabbitmq:3.6-management
+    container_name: rmqha_node0
+    restart: always
+    mem_limit: 256m
+    networks:
+      net1:
+        ipv4_address: 10.9.0.10
+    hostname: rmqha_node0
+    ports:
+      - "55672:15672"
+      - "56720:5672"
+    env_file:
+      - ./parameters.env
+    environment:
+      - CONTAINER_NAME=rmqha_node0
+      - RABBITMQ_HOSTNAME=rmqha_node0
+      - RABBITMQ_NODENAME=rabbit
+
+  slave1:
+    image: rabbitmq:3.6-management
+    container_name: rmqha_node1
+    restart: always
+    depends_on:
+      - master
+    mem_limit: 256m
+    networks:
+      net1:
+        ipv4_address: 10.9.0.11
+    hostname: rmqha_node1
+    # ports:
+    #   - "56721:5672"
+    volumes:
+      - "./volumes/rmqha_slave/cluster_entrypoint.sh:/usr/local/bin/cluster_entrypoint.sh"
+    entrypoint: "/usr/local/bin/cluster_entrypoint.sh"
+    command: "rabbitmq-server"
+    env_file:
+      - ./parameters.env
+    environment:
+      - CONTAINER_NAME=rmqha_node1
+      - RABBITMQ_HOSTNAME=rmqha_node1
+      - RABBITMQ_NODENAME=rabbit
+      - RMQHA_RAM_NODE=true
+
+  slave2:
+    image: rabbitmq:3.6-management
+    container_name: rmqha_node2
+    restart: always
+    depends_on:
+      - master
+    mem_limit: 256m
+    networks:
+      net1:
+        ipv4_address: 10.9.0.12
+    hostname: rmqha_node2
+    # ports:
+    #   - "56722:5672"
+    volumes:
+      - "./volumes/rmqha_slave/cluster_entrypoint.sh:/usr/local/bin/cluster_entrypoint.sh"
+    entrypoint: "/usr/local/bin/cluster_entrypoint.sh"
+    command: "rabbitmq-server"
+    env_file:
+      - ./parameters.env
+    environment:
+      - CONTAINER_NAME=rmqha_node2
+      - RABBITMQ_HOSTNAME=rmqha_node2
+      - RABBITMQ_NODENAME=rabbit
+      - RMQHA_RAM_NODE=true
+  
+  haproxy:
+    image: haproxy:1.8
+    container_name: rmqha_proxy
+    restart: always
+    depends_on:
+      - master
+      - slave1
+      - slave2
+    mem_limit: 256m
+    networks:
+      net1:
+        ipv4_address: 10.9.0.19
+    hostname: rmqha_proxy
+    ports:
+      - "56729:5672"
+      - "56730:5673"
+      - "51080:1080"
+      - "51081:1081"
+    volumes:
+      - "./volumes/rmqha_proxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro"
+      - "./volumes/rmqha_proxy:/root/rmqha_proxy"
+    environment:
+      - CONTAINER_NAME=rmqha_proxy
+
+networks:
+  net1:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.9.0.0/16
+          gateway: 10.9.0.1
